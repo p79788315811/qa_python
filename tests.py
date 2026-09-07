@@ -4,138 +4,139 @@ from main import BooksCollector
 
 @pytest.fixture
 def collector():
+    """Создает свежий экземпляр BooksCollector для каждого теста"""
     return BooksCollector()
 
 
-# 1. Добавление новой книги: валидное имя (до 40 символов), книга добавляется один раз
-@pytest.mark.parametrize("name", [
-    "Книга",
-    # Используем гарантированно короткую строку, чтобы не зависеть от подсчёта символов
-    "Короткая книга",
-])
-def test_add_new_book_valid(collector, name):
-    collector.add_new_book(name)
-    assert name in collector.books_genre
-    assert collector.books_genre[name] == ""  # без жанра
+class TestAddNewBook:
+    """Тесты метода add_new_book"""
 
-    # Повторное добавление не должно дублировать
-    collector.add_new_book(name)
-    assert len([k for k in collector.books_genre.keys() if k == name]) == 1
-
-
-# 2. Добавление книги: невалидные имена (пустая строка, слишком длинная строка)
-@pytest.mark.parametrize("name", [
-    "",
-    "Эта строка точно длиннее сорока символов, потому что тут больше сорока знаков!!!",
-])
-def test_add_new_book_invalid(collector, name):
-    collector.add_new_book(name)
-    assert name not in collector.books_genre
-
-
-# 3. Установка жанра: корректный жанр, книга есть в словаре
-@pytest.mark.parametrize("name, genre", [
-    ("Книга", "Фантастика"),
-    ("Другая книга", "Комедии"),
-])
-def test_set_book_genre_valid(collector, name, genre):
-    collector.add_new_book(name)
-    collector.set_book_genre(name, genre)
-    assert collector.get_book_genre(name) == genre
-
-
-# 4. Установка жанра: некорректный жанр или книги нет в словаре
-@pytest.mark.parametrize("name, genre, expected_unchanged", [
-    ("Книга", "Неизвестный жанр", True),      # жанр не из списка
-    ("Неизвестная книга", "Фантастика", True),  # книги нет в books_genre
-])
-def test_set_book_genre_invalid(collector, name, genre, expected_unchanged):
-    if name != "Неизвестная книга":
+    @pytest.mark.parametrize("name", [
+        "Книга",
+        "Короткая книга",
+        "Название ровно 40 символов!!!!!!!!!!!!!!"  # 40 символов
+    ])
+    def test_add_valid_books(self, collector, name):
         collector.add_new_book(name)
+        assert name in collector.books_genre
+        assert collector.books_genre[name] == ""  # Жанр пустой после добавления
 
-    collector.set_book_genre(name, genre)
-
-    if name in collector.books_genre:
-        current_genre = collector.get_book_genre(name)
-        assert current_genre != genre or current_genre == ""
-    else:
+    @pytest.mark.parametrize("name", [
+        "",  # Пустая строка
+        "Слишком длинное название, которое точно больше сорока символов, потому что тут много букв",  # >40 символов
+        "   ",  # Только пробелы (длина > 0, но невалидное)
+    ])
+    def test_add_invalid_names_rejected(self, collector, name):
+        collector.add_new_book(name)
         assert name not in collector.books_genre
 
-
-# 5. Получение жанра по имени: книга есть, книги нет
-@pytest.mark.parametrize("name, expected_genre", [
-    ("Книга", "Фантастика"),
-    ("Отсутствует", None),
-])
-def test_get_book_genre(collector, name, expected_genre):
-    if name == "Книга":
+    def test_no_duplicates(self, collector):
+        name = "Уникальная книга"
         collector.add_new_book(name)
-        collector.set_book_genre(name, "Фантастика")
-
-    assert collector.get_book_genre(name) == expected_genre
-
-
-# 6. Список книг с конкретным жанром: есть книги этого жанра, нет книг этого жанра
-@pytest.mark.parametrize("genre, books_to_add, expected_result", [
-    ("Фантастика", ["Книга А", "Книга Б"], ["Книга А", "Книга Б"]),
-    ("Ужасы", ["Книга В"], []),  # НЕ ставим жанр «Ужасы» — поэтому список пустой
-])
-def test_get_books_with_specific_genre(collector, genre, books_to_add, expected_result):
-    for b in books_to_add:
-        collector.add_new_book(b)
-        # Устанавливаем жанр только для «Фантастика», чтобы проверить оба случая
-        if genre == "Фантастика":
-            collector.set_book_genre(b, genre)
-
-    result = collector.get_books_with_specific_genre(genre)
-    assert set(result) == set(expected_result)
+        collector.add_new_book(name)  # Попытка добавить повторно
+        # Книга должна быть только одна
+        assert len(collector.books_genre) == 1
+        assert list(collector.books_genre.keys()).count(name) == 1
 
 
-# 7. Текущий словарь books_genre: проверяем, что возвращается именно он
-def test_get_books_genre(collector):
-    collector.add_new_book("Книга 1")
-    collector.add_new_book("Книга 2")
-    collector.set_book_genre("Книга 1", "Детективы")
+class TestSetBookGenre:
+    """Тесты метода set_book_genre"""
 
-    result = collector.get_books_genre()
-    assert isinstance(result, dict)
-    assert result is collector.books_genre  # это тот же самый объект
+    @pytest.mark.parametrize("book_name, genre", [
+        ("Книга 1", "Фантастика"),
+        ("Книга 2", "Мультфильмы"),
+        ("Книга 3", "Комедии"),
+    ])
+    def test_set_valid_genre(self, collector, book_name, genre):
+        collector.add_new_book(book_name)
+        collector.set_book_genre(book_name, genre)
+        assert collector.get_book_genre(book_name) == genre
 
+    def test_set_genre_for_nonexistent_book(self, collector):
+        # Пытаемся установить жанр для книги, которой нет
+        collector.set_book_genre("Неизвестная книга", "Фантастика")
+        assert "Неизвестная книга" not in collector.books_genre
 
-# 8. Книги для детей: исключаем жанры с возрастным рейтингом
-def test_get_books_for_children(collector):
-    collector.add_new_book("Детская книга")
-    collector.add_new_book("Страшная книга")
-    collector.set_book_genre("Детская книга", "Мультфильмы")
-    collector.set_book_genre("Страшная книга", "Ужасы")
-
-    children_books = collector.get_books_for_children()
-    assert "Детская книга" in children_books
-    assert "Страшная книга" not in children_books
-
-
-# 9. Добавление в избранное: книга есть в books_genre, нельзя добавить дважды
-@pytest.mark.parametrize("name, already_in_fav, expected_count", [
-    ("Любимая книга", False, 1),
-    ("Ещё одна любимая", True, 1),  # уже в избранном — количество не увеличится
-])
-def test_add_book_in_favorites(collector, name, already_in_fav, expected_count):
-    collector.add_new_book(name)
-    if already_in_fav:
-        collector.add_book_in_favorites(name)
-
-    collector.add_book_in_favorites(name)
-    assert len(collector.favorites) == expected_count
-    assert name in collector.favorites
+    def test_set_invalid_genre_ignored(self, collector):
+        book_name = "Книга"
+        collector.add_new_book(book_name)
+        # "Фэнтези" нет в списке разрешенных жанров (genre), поэтому не должно примениться
+        collector.set_book_genre(book_name, "Фэнтези")
+        assert collector.get_book_genre(book_name) != "Фэнтези"
+        assert collector.get_book_genre(book_name) == ""
 
 
-# 10. Удаление из избранного и получение списка избранного
-def test_delete_book_from_favorites_and_list(collector):
-    collector.add_new_book("Книга X")
-    collector.add_book_in_favorites("Книга X")
+class TestGetBookGenre:
+    """Тесты метода get_book_genre"""
 
-    assert "Книга X" in collector.get_list_of_favorites_books()
+    def test_get_existing_genre(self, collector):
+        collector.add_new_book("Книга")
+        collector.set_book_genre("Книга", "Детективы")
+        assert collector.get_book_genre("Книга") == "Детективы"
 
-    collector.delete_book_from_favorites("Книга X")
-    assert "Книга X" not in collector.get_list_of_favorites_books()
-    assert len(collector.get_list_of_favorites_books()) == 0
+    def test_get_missing_book_returns_none(self, collector):
+        assert collector.get_book_genre("Отсутствует") is None
+
+
+class TestFavorites:
+    """Тесты методов работы с избранным"""
+
+    def test_add_to_favorites(self, collector):
+        collector.add_new_book("Любимая книга")
+        collector.add_book_in_favorites("Любимая книга")
+        assert "Любимая книга" in collector.get_list_of_favorites_books()
+
+    def test_no_duplicates_in_favorites(self, collector):
+        collector.add_new_book("Любимая книга")
+        collector.add_book_in_favorites("Любимая книга")
+        collector.add_book_in_favorites("Любимая книга")  # Повторный вызов
+        assert len(collector.get_list_of_favorites_books()) == 1
+
+    def test_delete_from_favorites(self, collector):
+        collector.add_new_book("Книга X")
+        collector.add_book_in_favorites("Книга X")
+        collector.delete_book_from_favorites("Книга X")
+        assert "Книга X" not in collector.get_list_of_favorites_books()
+        assert len(collector.get_list_of_favorites_books()) == 0
+
+    def test_get_empty_favorites_list(self, collector):
+        assert collector.get_list_of_favorites_books() == []
+
+
+class TestFiltering:
+    """Тесты методов фильтрации книг"""
+
+    def test_get_books_with_specific_genre(self, collector):
+        collector.add_new_book("Книга А")
+        collector.set_book_genre("Книга А", "Фантастика")
+
+        collector.add_new_book("Книга Б")
+        collector.set_book_genre("Книга Б", "Фантастика")
+
+        result = collector.get_books_with_specific_genre("Фантастика")
+        assert set(result) == {"Книга А", "Книга Б"}
+
+    def test_get_books_for_children_excludes_adult_genres(self, collector):
+        # Книги для детей
+        collector.add_new_book("Мульт про зайца")
+        collector.set_book_genre("Мульт про зайца", "Мультфильмы")
+
+        # Книги НЕ для детей (есть в genre_age_rating)
+        collector.add_new_book("Страшная история")
+        collector.set_book_genre("Страшная история", "Ужасы")
+
+        collector.add_new_book("Детективная загадка")
+        collector.set_book_genre("Детективная загадка", "Детективы")
+
+        children_books = collector.get_books_for_children()
+
+        assert "Мульт про зайца" in children_books
+        assert "Страшная история" not in children_books
+        assert "Детективная загадка" not in children_books
+
+    def test_get_books_genre_returns_dict(self, collector):
+        collector.add_new_book("Книга 1")
+        result = collector.get_books_genre()
+        assert isinstance(result, dict)
+        # Возвращается тот же самый объект словаря
+        assert result is collector.books_genre
